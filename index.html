@@ -115,7 +115,49 @@ section{padding-block:56px}
 
 footer{border-top:1px solid var(--line);padding-block:24px 40px;font-family:var(--f-mono);font-size:12px;color:var(--muted);display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
 
+/* guide: how the table plays */
+.guide{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--panel)}
+.tip{padding:20px 20px 22px;display:grid;gap:8px;align-content:start;min-width:0}
+.tip+.tip{border-left:1px solid var(--line)}
+.tip .ic{font-family:var(--f-mono);font-size:12px;letter-spacing:.1em;color:var(--pool)}
+.tip h3{margin:0;font-family:var(--f-cjk);font-weight:600;font-size:19px;letter-spacing:.04em}
+.tip p{margin:0;font-size:14px;color:var(--muted);text-wrap:pretty}
+.rank{margin-top:20px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-family:var(--f-mono);font-size:13px}
+.rank .lab{font-family:var(--f-body);font-size:13px;color:var(--muted);margin-right:6px}
+.rank span{padding:3px 8px;border:1px solid var(--line);border-radius:6px;background:var(--panel)}
+.rank span.hot{border-color:var(--gold);color:var(--gold)}
+.rank i{font-style:normal;color:var(--muted)}
+
+/* seed tabs */
+.tabs{display:flex;gap:4px;margin:-6px 0 18px;flex-wrap:wrap}
+.tabs button{font:inherit;font-size:13px;padding:5px 12px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--muted);cursor:pointer}
+.tabs button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.seed-own{margin-top:18px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;font-size:14px;color:var(--muted)}
+.seed-own input{font-family:var(--f-mono);font-size:15px;letter-spacing:.14em;text-transform:uppercase;padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--ink);width:11em;max-width:100%}
+.seed-own button{font:inherit;font-size:14px;font-weight:600;padding:8px 16px;border-radius:999px;border:0;background:var(--pool);color:var(--bg);cursor:pointer}
+
+/* hobbies */
+.hob{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}
+.hb{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;display:grid;gap:10px;align-content:start;min-width:0}
+.hb .k{font-family:var(--f-mono);font-size:12px;letter-spacing:.1em;color:var(--muted)}
+.hb h3{margin:0;font-family:var(--f-cjk);font-weight:600;font-size:20px;letter-spacing:.04em}
+.hb p{margin:0;font-size:14px;color:var(--muted);text-wrap:pretty}
+.hb .meter{display:grid;gap:6px;margin-top:4px}
+.hb .meter div{display:grid;grid-template-columns:5.5em minmax(0,1fr);gap:10px;align-items:center;font-size:12px;color:var(--muted)}
+.hb .meter b{display:block;height:6px;border-radius:3px;background:linear-gradient(90deg,var(--pool) var(--v),var(--pool-soft) var(--v))}
+
+/* log */
+.log{list-style:none;margin:0;padding:0;display:grid;border-top:1px solid var(--line)}
+.log li{display:grid;grid-template-columns:7.5em minmax(0,1fr);gap:16px;padding:14px 0;border-bottom:1px solid var(--line);font-size:15px}
+.log time{font-family:var(--f-mono);font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.log b{font-weight:600}
+
 @media (max-width:760px){
+  .guide{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+  .tip:nth-child(3){border-left:0}
+  .tip:nth-child(n+3){border-top:1px solid var(--line)}
+  .hob{grid-template-columns:minmax(0,1fr)}
+  .log li{grid-template-columns:minmax(0,1fr);gap:2px}
   .rooms,.lounge,.desk{grid-template-columns:minmax(0,1fr)}
   .side{grid-template-rows:none}
   .feat{grid-template-columns:minmax(0,1fr);min-height:0}
@@ -124,6 +166,7 @@ footer{border-top:1px solid var(--line);padding-block:24px 40px;font-family:var(
   .seeds a{grid-template-columns:6.6em minmax(0,1fr)}
   .seeds em{display:none}
 }
+@media (max-width:440px){.guide{grid-template-columns:minmax(0,1fr)}.tip+.tip{border-left:0;border-top:1px solid var(--line)}}
 @media (prefers-reduced-motion:reduce){.feat,.fan .c{transition:none}}
 </style>
 </head>
@@ -132,7 +175,7 @@ footer{border-top:1px solid var(--line);padding-block:24px 40px;font-family:var(
 <div class="wrap">
   <header class="top">
     <a href="./">MindResort</a>
-    <nav><a href="#rooms">房间</a><a href="#lounge">种子</a><a href="#desk">前台</a></nav>
+    <nav><a href="#rooms">房间</a><a href="#guide">玩法</a><a href="#lounge">种子</a><a href="#hobby">爱好</a><a href="#desk">前台</a></nav>
   </header>
 
   <div class="hero">
@@ -169,8 +212,20 @@ footer{border-top:1px solid var(--line);padding-block:24px 40px;font-family:var(
     </div>
   </section>
 
+  <section id="guide">
+    <div class="sh"><h2>101 房间说明</h2><span class="k">How the table plays</span></div>
+    <div class="guide">
+      <div class="tip"><span class="ic">AI · 记牌</span><h3>对手会算牌</h3><p>AI 记住每一张打出去的牌，按剩余张数估算你能不能接住。你只剩一两张时，它会拼命顶。</p></div>
+      <div class="tip"><span class="ic">AI · 配合</span><h3>队友会让牌</h3><p>对家不会去压你的牌。你快出完时，它还会故意出小牌喂给你。</p></div>
+      <div class="tip"><span class="ic">进贡 · 概率</span><h3>进贡也有算计</h3><p>还贡时会算这张牌送过去，会不会让对面凑出炸弹或同花顺。</p></div>
+      <div class="tip"><span class="ic">理牌 · 推荐</span><h3>帮你出主意</h3><p>一键理出同花顺和炸弹，AI 推荐会写出每种出法后续还要几手、被管的概率。</p></div>
+    </div>
+    <div class="rank"><span class="lab">炸弹大小</span><span>4 炸</span><i>&lt;</i><span>5 炸</span><i>&lt;</i><span class="hot">同花顺</span><i>&lt;</i><span>6 炸</span><i>&lt;</i><span>…</span><i>&lt;</i><span>10 炸</span><i>&lt;</i><span class="hot">天王炸</span></div>
+  </section>
+
   <section id="lounge">
     <div class="sh"><h2>种子收藏</h2><span class="k">Seed lounge · 掼蛋</span></div>
+    <div class="tabs" id="seedTabs" role="group" aria-label="筛选种子"><button aria-pressed="true" data-f="all">全部</button><button aria-pressed="false" data-f="1">只看单局</button><button aria-pressed="false" data-f="3">三连系列</button></div>
     <div class="lounge">
       <div class="shelf">
         <h3><span class="dot"></span>逆天好牌</h3>
@@ -180,7 +235,10 @@ footer{border-top:1px solid var(--line);padding-block:24px 40px;font-family:var(
           <li><a href="guandan/#8XYHMQ"><code>8XYHMQ</code><span>天王炸 + 两条同花顺</span><em>1 局</em></a></li>
           <li><a href="guandan/#9T45P6"><code>9T45P6</code><span>五个炸弹 + 两张配</span><em>1 局</em></a></li>
           <li><a href="guandan/#CVT4MU"><code>CVT4MU</code><span>9 张 K 炸弹</span><em>1 局</em></a></li>
-          <li><a href="guandan/#NMZYWV"><code>NMZYWV</code><span>连续三局好牌</span><em>3 局</em></a></li>
+          <li><a href="guandan/#TE79JT"><code>TE79JT</code><span>天王炸 + 4 张 A + 两张配</span><em>1 局</em></a></li>
+          <li><a href="guandan/#NMZYWV"><code>NMZYWV</code><span>三局好牌，第 2 局天王炸</span><em>3 局</em></a></li>
+          <li><a href="guandan/#CU2MH8"><code>CU2MH8</code><span>三局好牌，第 3 局天王炸</span><em>3 局</em></a></li>
+          <li><a href="guandan/#V4SA3W"><code>V4SA3W</code><span>三局好牌，第 3 局 6 张 A</span><em>3 局</em></a></li>
         </ul>
       </div>
       <div class="shelf bad">
@@ -191,9 +249,35 @@ footer{border-top:1px solid var(--line);padding-block:24px 40px;font-family:var(
           <li><a href="guandan/#M2CG52"><code>M2CG52</code><span>前两局零牌力</span><em>3 局</em></a></li>
           <li><a href="guandan/#HPM6SN"><code>HPM6SN</code><span>开局全是散牌</span><em>1 局</em></a></li>
           <li><a href="guandan/#V6RB47"><code>V6RB47</code><span>开局全是散牌</span><em>1 局</em></a></li>
+          <li><a href="guandan/#JV3KK7"><code>JV3KK7</code><span>开局全是散牌</span><em>1 局</em></a></li>
+          <li><a href="guandan/#M887DM"><code>M887DM</code><span>三局没有一个炸弹</span><em>3 局</em></a></li>
+          <li><a href="guandan/#TC8SYQ"><code>TC8SYQ</code><span>前两局没有炸弹</span><em>3 局</em></a></li>
         </ul>
       </div>
     </div>
+    <form class="seed-own" id="seedForm"><label for="seedIn">有自己的种子？</label><input id="seedIn" maxlength="12" placeholder="K7Q2MX" autocomplete="off" spellcheck="false"><button type="submit">开局</button></form>
+  </section>
+
+  <section id="hobby">
+    <div class="sh"><h2>兴趣爱好</h2><span class="k">Off duty</span></div>
+    <div class="hob">
+      <div class="hb"><span class="k">CARDS</span><h3>牌桌</h3><p>掼蛋、斗地主，喜欢算牌胜过运气。101 房间就是从这里来的。</p>
+        <div class="meter"><div>手感<b style="--v:72%"></b></div><div>记牌<b style="--v:60%"></b></div></div></div>
+      <div class="hb"><span class="k">BUILD</span><h3>做小东西</h3><p>想到什么就做成网页：一个文件、打开就能用，手机也行。</p>
+        <div class="meter"><div>已上线<b style="--v:34%"></b></div><div>在路上<b style="--v:66%"></b></div></div></div>
+      <div class="hb"><span class="k">COLOUR</span><h3>颜色和名字</h3><p>给项目起名、配色，是最开心的一步。<a href="https://huevane.github.io/">綄彩</a>就是这么来的。</p>
+        <div class="meter"><div>起名<b style="--v:88%"></b></div><div>配色<b style="--v:76%"></b></div></div></div>
+    </div>
+  </section>
+
+  <section id="log">
+    <div class="sh"><h2>开业日志</h2><span class="k">Guest book · 2026</span></div>
+    <ol class="log" reversed>
+      <li><time datetime="2026-11-21">2026-11-21</time><span><b>MindResort 开业</b>，掼蛋牌桌搬进 101 房间。</span></li>
+      <li><time datetime="2026-11-20">2026-11-20</time><span>掼蛋加上<b>种子开局</b>，找到了一批逆天好牌和逆天烂牌。</span></li>
+      <li><time datetime="2026-11-20">2026-11-20</time><span>掼蛋加上<b>组牌、理牌和 AI 推荐</b>，进贡开始算概率。</span></li>
+      <li><time datetime="2026-11-19">2026-11-19</time><span>第一版<b>掼蛋牌桌</b>写好，打出第一把。</span></li>
+    </ol>
   </section>
 
   <section id="desk">
@@ -211,5 +295,17 @@ footer{border-top:1px solid var(--line);padding-block:24px 40px;font-family:var(
   <footer><span>© 2026 MindResort · <a href="https://huevane.github.io/">Huevane 綄彩</a> 驻地</span><span>mindresort.github.io</span></footer>
 </div>
 
+<script>
+(()=>{
+  const tabs=document.getElementById('seedTabs');
+  tabs.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const f=b.dataset.f;
+    tabs.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));
+    document.querySelectorAll('.seeds li').forEach(li=>{const n=li.querySelector('em').textContent.trim()[0];li.hidden=f!=='all'&&n!==f;});});
+  const form=document.getElementById('seedForm'),inp=document.getElementById('seedIn');
+  const norm=s=>s.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,12);
+  inp.addEventListener('input',()=>{const v=norm(inp.value);if(v!==inp.value)inp.value=v;});
+  form.addEventListener('submit',e=>{e.preventDefault();const v=norm(inp.value);if(!v){inp.focus();return;}location.href='guandan/#'+v;});
+})();
+</script>
 </body>
 </html>
