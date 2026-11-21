@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<script>try{const t=localStorage.getItem("theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>
 <title>MindResort</title>
 <meta name="description" content="MindResort 心境度假村：掼蛋牌桌、铁道图鉴等小游戏和小工具。綄彩色出品。">
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -40,6 +42,11 @@ a{color:inherit}
 .top a{text-decoration:none}
 .top a:hover{color:var(--pool)}
 .top nav{display:flex;gap:18px}
+.top .end{display:flex;align-items:center;gap:18px}
+.theme-tg{font:inherit;font-family:var(--f-mono);font-size:11px;letter-spacing:.08em;display:inline-flex;align-items:center;gap:7px;padding:5px 11px 5px 9px;border:1px solid var(--line);border-radius:999px;background:transparent;color:inherit;cursor:pointer;white-space:nowrap}
+.theme-tg:hover{color:var(--ink);border-color:var(--ink)}
+.theme-tg i{width:12px;height:12px;border-radius:50%;border:1.5px solid currentColor;background:linear-gradient(90deg,currentColor 50%,transparent 50%)}
+
 
 /* hero sign */
 .hero{padding-block:clamp(40px,9vw,110px) clamp(36px,6vw,72px);border-bottom:1px solid var(--line);display:grid;gap:28px}
@@ -207,7 +214,7 @@ a.hb:hover{border-color:var(--pool)}
 <div class="wrap">
   <header class="top">
     <a href="./">MindResort</a>
-    <nav><a href="#rooms">房间</a><a href="#guide">101</a><a href="#rail">102</a><a href="#lounge">种子</a><a href="#hobby">线索</a><a href="#desk">前台</a></nav>
+    <div class="end"><nav><a href="#rooms">房间</a><a href="#guide">101</a><a href="#rail">102</a><a href="#lounge">种子</a><a href="#hobby">线索</a><a href="#desk">前台</a></nav><button class="theme-tg" id="themeTg" type="button" aria-label="深色模式" aria-pressed="false"><i aria-hidden="true"></i><span>深色</span></button></div>
   </header>
 
   <div class="hero">
@@ -360,6 +367,14 @@ a.hb:hover{border-color:var(--pool)}
 </div>
 
 <script>
+(()=>{
+  const root=document.documentElement,tg=document.getElementById('themeTg'),mq=matchMedia('(prefers-color-scheme: dark)');
+  const cur=()=>root.dataset.theme||(mq.matches?'dark':'light');
+  const sync=()=>{const d=cur()==='dark';tg.setAttribute('aria-pressed',String(d));tg.querySelector('span').textContent=d?'浅色':'深色';tg.title=d?'切换到浅色':'切换到深色';dispatchEvent(new CustomEvent('themechange',{detail:cur()}));};
+  tg.addEventListener('click',()=>{const n=cur()==='dark'?'light':'dark';root.dataset.theme=n;try{localStorage.setItem('theme',n)}catch(e){}sync();});
+  mq.addEventListener('change',()=>{if(!root.dataset.theme)sync();});
+  sync();
+})();
 (()=>{
   const tabs=document.getElementById('seedTabs');
   tabs.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const f=b.dataset.f;
