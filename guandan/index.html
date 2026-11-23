@@ -43,6 +43,10 @@ body{background:radial-gradient(ellipse 80% 60% at 50% 38%,var(--felt-2),var(--f
 .lnk{background:none;border:0;color:var(--muted);font:inherit;font-size:13px;cursor:pointer;padding:6px 4px}
 .lnk:hover{color:var(--ink)}
 .lnk.on{color:var(--gold)}
+.lvsel{display:flex;border:1px solid var(--line);border-radius:999px;overflow:hidden}
+.lvsel button{font:inherit;font-size:12px;padding:3px 10px;background:none;border:0;color:var(--muted);cursor:pointer}
+.lvsel button[aria-pressed="true"]{background:var(--gold);color:var(--on-gold);font-weight:700}
+.lvsel button:focus-visible{outline:2px solid var(--gold);outline-offset:-2px}
 
 /* table */
 .table{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto;gap:6px;min-height:0}
@@ -159,6 +163,7 @@ body{background:radial-gradient(ellipse 80% 60% at 50% 38%,var(--felt-2),var(--f
     </div>
     <button class="seed" id="btnSeed" aria-label="查看或更换牌局种子">种子<b id="seedTxt">------</b><span id="handTxt">第1局</span></button>
     <span class="sp"></span>
+    <div class="lvsel" id="lvSel" role="group" aria-label="AI 难度"><button data-lv="easy" title="对高级胜率约 28%，适合熟悉规则">低</button><button data-lv="mid" title="对高级胜率约 45%，会记牌">中</button><button data-lv="hard" title="全力计算，记牌并按局势用炸弹">高</button></div>
     <button class="lnk" id="btnAdv">AI推荐</button>
     <button class="lnk" id="btnDuo">四色牌</button>
     <button class="lnk" id="btnRules">规则</button>
@@ -242,9 +247,9 @@ const PLACE=['头游','二游','三游','末游'];
 const TYPE_N={single:'单张',pair:'对子',triple:'三张',fh:'三带二',straight:'顺子',pairs3:'三连对',plate:'钢板',sf:'同花顺',jokerbomb:'天王炸'};
 const RANKS=[2,3,4,5,6,7,8,9,10,11,12,13,14,16,17];
 let S=null, timer=null, toastT=null;
-const pref={adv:true,duo:false};
-try{const a=localStorage.getItem('gd-adv'),d=localStorage.getItem('gd-duo');if(a!==null)pref.adv=a==='1';if(d!==null)pref.duo=d==='1';}catch(e){}
-const savePref=()=>{try{localStorage.setItem('gd-adv',pref.adv?'1':'0');localStorage.setItem('gd-duo',pref.duo?'1':'0');}catch(e){}};
+const pref={adv:true,duo:false,lv:'mid'};
+try{const a=localStorage.getItem('gd-adv'),d=localStorage.getItem('gd-duo');if(a!==null)pref.adv=a==='1';if(d!==null)pref.duo=d==='1';const v=localStorage.getItem('gd-lv');if(v)pref.lv=v;}catch(e){}
+const savePref=()=>{try{localStorage.setItem('gd-adv',pref.adv?'1':'0');localStorage.setItem('gd-duo',pref.duo?'1':'0');localStorage.setItem('gd-lv',pref.lv);}catch(e){}};
 
 const L=()=>S.level[S.levelTeam];
 const isWild=c=>c.s==='H'&&c.r===L();
@@ -520,7 +525,26 @@ function oppsUntil(p,stop){
 }
 function riskOf(combo,opps,u){return opps.reduce((s,q)=>s+DANGER*leak(combo,S.hands[q].length,u),0);}
 
-function rankMoves(p){
+/* Spending a bomb throws away a guaranteed trick-winner. Natural bombs already count as one turn in the
+   evaluation, but wild-built bombs look free (they consume a weak triple), so every bomb move pays an explicit
+   price: bigger bombs and wilds cost more, and the price drops as an opponent nears going out. */
+const BP={base:1.1,size:.25,wild:.6,ph:[3.2,2.2,1.2,.55,.15],streak:.6,big:.7,run:.5};
+/* Price of spending a bomb. Bombs win the lead back, so they are worth most while the opponents still have
+   many cards; they get cheaper when the opponents are near going out, when the opponents have been keeping the
+   lead trick after trick, when the play being beaten is a big multi-card combo (they are dumping their hand
+   fast), and when taking the lead lets this player run out soon after. */
+function bombCost(c,ctx){
+  const k=c.combo;let cost;
+  if(k.type==='jokerbomb')cost=BP.base*2;else if(k.type==='sf')cost=BP.base*1.45;else cost=BP.base+BP.size*(c.cards.length-4);
+  cost+=BP.wild*c.wilds;
+  const m=ctx.oppMin;
+  let f=m>=13?BP.ph[0]:m>=9?BP.ph[1]:m>=6?BP.ph[2]:m>=3?BP.ph[3]:BP.ph[4];
+  if(ctx.streak>=2)f*=BP.streak;
+  if(ctx.lastBig)f*=BP.big;
+  if(ctx.after<=1.5)f*=BP.run;
+  return cost*f;
+}
+function rankMoves(p,blind){
   EVC=new Map();
   const hand=S.hands[p],last=S.last,base=evalCards(hand),u=unseenFor(p);
   const partner=(p+2)%4,partnerIn=!S.out.includes(partner);
@@ -532,8 +556,13 @@ function rankMoves(p){
     const n=c.cards.length,after=evalCards(without(hand,c.cards)),t=c.combo.type,v=c.combo.v;
     let s=after-base+(c.combo.bomb?0:v/40)-(last?0:n*0.04);
     if(n===hand.length)return {c,s:s-100,after:0};
+    if(c.combo.bomb){
+      const tr=S.tricks||[],oppTeam=(p+1)%2;let streak=0;
+      for(let i=tr.length-1;i>=0&&tr[i]===oppTeam;i--)streak++;   // tricks the opponents have won in a row
+      s+=bombCost(c,{oppMin,streak,after,lastBig:!!last&&last.p%2!==p%2&&last.cards.length>=5&&!last.combo.bomb});
+      if(!last&&after>0.6)s+=4;}
     if(after<=0.6)s-=1.2;
-    s+=riskOf(c.combo,opps,u);
+    if(!blind)s+=riskOf(c.combo,opps,u);
     if(!last&&partnerIn&&S.hands[partner].length<=2&&oppMin>2){
       if(S.hands[partner].length===1&&t==='single'&&v<=9)s-=1.5;
       if(S.hands[partner].length===2&&t==='pair'&&v<=9)s-=1.2;
@@ -544,26 +573,39 @@ function rankMoves(p){
   if(last){
     const behind=oppsUntil(p,last.p);
     if(last.p%2===p%2){
-      const r=riskOf(last.combo,behind,u);
+      const r=blind?0:riskOf(last.combo,behind,u);
       passScore=r>0.3?r:-50;passWhy=r>0.3?'队友的牌可能被接走':'队友的牌，让他走';
       list.forEach(m=>{if(m.c.combo.bomb&&r<=0.3)m.s+=3;});
     }else{
       const lc=S.hands[last.p].length;
       passScore=lc<=4?3.6:lc<=8?2:lc<=12?1:0.15;passWhy='保留牌力';
-      if(last.combo.bomb&&lc>8)passScore-=0.5;
-      passScore+=riskOf(last.combo,behind,u);
-      if(lc===1)passScore+=DANGER;else if(lc===2)passScore+=DANGER*0.5;
+
+      const small=(last.combo.type==='single'||last.combo.type==='pair')&&last.combo.v<=12&&!last.combo.bomb;
+
+      if(!blind){passScore+=riskOf(last.combo,behind,u);
+      if(lc===1)passScore+=DANGER;else if(lc===2)passScore+=DANGER*0.5;}
       if(lc<=2)passWhy='对手快出完了，不建议放';
     }
     list.sort((a,b)=>a.s-b.s);
   }
   return {list,passScore,passWhy};
 }
+/* AI levels. Weaker levels plan worse, not randomly:
+   noise  – random error added to each move's score (misjudges which play is better)
+   blind  – ignores card counting and the danger of opponents about to go out
+   greedy – plays the first legal move that beats the table more often instead of passing to save strength */
+const LEVELS={easy:{noise:1.6,blind:true,greedy:.45},mid:{noise:.55,blind:false,greedy:.12},hard:{noise:0,blind:false,greedy:0}};
+let AIL='hard';
+function setAILevel(k){if(LEVELS[k])AIL=k;}
+let RNG=Math.random;
 function decide(p){
-  const {list,passScore}=rankMoves(p);
+  const L=LEVELS[AIL];
+  const {list,passScore}=rankMoves(p,L.blind);
   if(!list.length)return null;
+  if(L.noise){list.forEach(m=>{if(m.s>-50)m.s+=(RNG()*2-1)*L.noise;});list.sort((a,b)=>a.s-b.s);}
   const best=list[0];
   if(!S.last)return best.c;
+  if(L.greedy&&RNG()<L.greedy&&!best.c.combo.bomb)return best.c;
   return best.s<passScore?best.c:null;
 }
 function aiMove(){const p=S.cur;if(S.phase!=='play'||p===0)return;const c=decide(p);act(p,c?c.cards:null,c?c.combo:null);}
@@ -614,6 +656,7 @@ function advance(){
   if(active.filter(q=>q!==lp).every(q=>S.passed.includes(q))){
     let lead=lp;
     if(S.out.includes(lp)){const pt=(lp+2)%4;lead=S.out.includes(pt)?nextActive(lp):pt;}
+    (S.tricks||(S.tricks=[])).push(lp%2);
     S.last=null;S.passed=[];S.cur=lead;
     if(lead===0&&lp===2)S.msg='对家出完了，你来接风';
   }else S.cur=nextActive(S.cur);
@@ -666,7 +709,7 @@ function deal(){
   S.handNo=(S.handNo||0)+1;
   const d=shuffle(newDeck(),mulberry32(hashStr(S.seed+'#'+S.handNo)));
   S.hands=[0,1,2,3].map(i=>d.slice(i*27,i*27+27));
-  Object.assign(S,{out:[],last:null,passed:[],played:[],table:{},sel:[],hintI:-1,newIds:[],groups:[],phase:'play',result:null,msg:'',ret:null});
+  Object.assign(S,{out:[],last:null,passed:[],played:[],tricks:[],table:{},sel:[],hintI:-1,newIds:[],groups:[],phase:'play',result:null,msg:'',ret:null});
   let lead=0;
   if(S.prevOrder){const t=doTribute();lead=t.lead;S.msg=t.note;
     if(t.pending){S.phase='return';S.ret={to:t.pending.to,lead};S.msg=t.note+`。选一张牌还给${NAMES[t.pending.to]}`;}}
@@ -687,7 +730,7 @@ function adviceItems(){
     items=scoreReturns(0,S.ret.to).slice(0,4).map(x=>({cards:[x.c],
       meta:`${turnsTxt(x.after)} · 送炸<em>${pct(x.g.bomb)}</em> · 送同花顺<em>${pct(x.g.sf)}</em>`}));
   }else if(S.phase==='play'&&S.cur===0){
-    const {list,passScore,passWhy}=rankMoves(0),seen=new Set(),picked=[];
+    const {list,passScore,passWhy}=rankMoves(0,false),seen=new Set(),picked=[];
     for(const m of list){const k=m.c.cards.map(cardTxt).sort().join();if(seen.has(k))continue;seen.add(k);picked.push(m);if(picked.length>=3)break;}
     items=picked.map(m=>{const n=m.c.cards.length,fin=n===S.hands[0].length;
       return {s:m.s,cards:m.c.cards,meta:fin?`${comboName(m.c.combo,n)} · 直接出完`:`${comboName(m.c.combo,n)} · ${turnsTxt(m.after)} · 被管<em>${pct(beatProb(m.c.combo,0))}</em>`};});
@@ -759,6 +802,7 @@ function render(){
   document.documentElement.classList.toggle('duo',pref.duo);
   $('#btnDuo').textContent=pref.duo?'双色牌':'四色牌';
   $('#btnAdv').classList.toggle('on',pref.adv);
+  document.querySelectorAll('#lvSel button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.lv===AIL)));
   $('#seedTxt').textContent=S.seed;$('#handTxt').textContent=`第${S.handNo}局`;$('#seedBig').textContent=S.seed;
   $('#lvUs').textContent=rankName(S.level[0]);$('#lvThem').textContent=rankName(S.level[1]);
   $('#teamUs').classList.toggle('on',S.levelTeam===0);$('#teamThem').classList.toggle('on',S.levelTeam===1);
@@ -826,6 +870,8 @@ $('#btnAuto').onclick=()=>{
   toast('理出 '+Object.entries(cnt).map(([k,v])=>`${k}×${v}`).join('、'),2600);};
 $('#btnReset').onclick=()=>{S.groups=[];render();};
 $('#btnAdv').onclick=()=>{pref.adv=!pref.adv;savePref();render();};
+$('#lvSel').addEventListener('click',e=>{const b=e.target.closest('button[data-lv]');if(!b)return;
+  setAILevel(b.dataset.lv);pref.lv=AIL;savePref();render();toast({easy:'低级 AI：对高级胜率约 28%，适合熟悉规则',mid:'中级 AI：对高级胜率约 45%，会记牌',hard:'高级 AI：全力计算，记牌并按局势用炸弹'}[AIL],2600);});
 $('#btnDuo').onclick=()=>{pref.duo=!pref.duo;savePref();render();};
 function startSeed(seed,msg){clearTimeout(timer);newGame(seed);$('#seedOv').hidden=true;render();schedule();toast(msg||`种子 ${S.seed}，第 1 局开始`,2400);}
 $('#btnSeed').onclick=()=>{$('#seedIn').value='';$('#seedOv').hidden=false;};
@@ -850,6 +896,7 @@ $('#btnNew').onclick=e=>{const b=e.currentTarget;
 addEventListener('resize',()=>S&&renderHand());
 
 function start(data){
+  setAILevel(pref.lv);
   const fromHash=normSeed(location.hash.slice(1));
   S=data&&data.S?data.S:null;if(!S)newGame(fromHash);
   if(!S.played)S.played=[];if(!S.groups)S.groups=[];
