@@ -75,6 +75,12 @@ body{background:radial-gradient(ellipse 80% 60% at 50% 38%,var(--felt-2),var(--f
 .status{font-size:14px;margin-top:6px;text-wrap:balance}
 .note{font-size:12px;color:var(--gold);max-width:36ch;text-wrap:balance}
 @keyframes pulse{50%{opacity:.6}}
+.deck{position:fixed;left:50%;top:44%;width:44px;height:62px;margin:-31px 0 0 -22px;border-radius:5px;border:2px solid var(--card);box-sizing:border-box;
+  background:repeating-linear-gradient(45deg,var(--cinnabar) 0 3px,var(--cinnabar-2) 3px 6px);box-shadow:3px 3px 0 -1px var(--card-2),6px 6px 0 -2px var(--card-2),0 6px 14px rgba(0,0,0,.5);z-index:15;pointer-events:none}
+.deck b{position:absolute;left:100%;top:50%;transform:translate(12px,-50%);font:600 13px var(--f-card);color:var(--ink);white-space:nowrap}
+.fly{position:fixed;width:30px;height:42px;margin:-21px 0 0 -15px;border-radius:4px;border:2px solid var(--card);box-sizing:border-box;z-index:16;pointer-events:none;
+  background:repeating-linear-gradient(45deg,var(--cinnabar) 0 3px,var(--cinnabar-2) 3px 6px);transition:transform .32s cubic-bezier(.3,.7,.3,1),opacity .32s}
+.skipdeal{position:fixed;left:50%;top:calc(44% + 44px);transform:translateX(-50%);z-index:17}
 
 /* cards: the top-left index (rank over suit) is the part that stays visible when cards overlap */
 .card{position:relative;flex:none;box-sizing:border-box;width:var(--cw);height:var(--ch);background:linear-gradient(160deg,var(--card) 40%,var(--card-2));color:var(--sc,var(--card-ink));border:1px solid var(--card-edge);border-radius:calc(var(--cw)*.11);box-shadow:-1px 0 3px rgba(0,0,0,.18),0 2px 5px rgba(0,0,0,.35);font-family:var(--f-card);user-select:none;-webkit-user-select:none;overflow:hidden}
@@ -150,7 +156,7 @@ body{background:radial-gradient(ellipse 80% 60% at 50% 38%,var(--felt-2),var(--f
   .played{--cw:52px;--ch:73px;--ov:24px}
   .back{width:28px;height:40px}
 }
-@media (prefers-reduced-motion:reduce){.seat.turn .name{animation:none}.col .card{transition:none}}
+@media (prefers-reduced-motion:reduce){.seat.turn .name{animation:none}.col .card{transition:none}.fly{display:none}}
 </style>
 
 <div class="app">
@@ -163,7 +169,7 @@ body{background:radial-gradient(ellipse 80% 60% at 50% 38%,var(--felt-2),var(--f
     </div>
     <button class="seed" id="btnSeed" aria-label="查看或更换牌局种子">种子<b id="seedTxt">------</b><span id="handTxt">第1局</span></button>
     <span class="sp"></span>
-    <div class="lvsel" id="lvSel" role="group" aria-label="AI 难度"><button data-lv="easy" title="对高级胜率约 28%，适合熟悉规则">低</button><button data-lv="mid" title="对高级胜率约 45%，会记牌">中</button><button data-lv="hard" title="全力计算，记牌并按局势用炸弹">高</button></div>
+    <div class="lvsel" id="lvSel" role="group" aria-label="AI 难度"><button data-lv="easy" title="对高级胜率约 27%，适合熟悉规则">低</button><button data-lv="mid" title="对高级胜率约 43%，会记牌">中</button><button data-lv="hard" title="全力计算，记牌并按局势用炸弹">高</button></div>
     <button class="lnk" id="btnAdv">AI推荐</button>
     <button class="lnk" id="btnDuo">四色牌</button>
     <button class="lnk" id="btnRules">规则</button>
@@ -202,6 +208,8 @@ body{background:radial-gradient(ellipse 80% 60% at 50% 38%,var(--felt-2),var(--f
 </div>
 
 <div class="toast" id="toast" hidden></div>
+<div class="deck" id="deck" hidden><b id="deckN">108</b></div>
+<button class="btn sm skipdeal" id="btnSkipDeal" hidden>跳过发牌</button>
 
 <div class="ov" id="endOv" hidden><div class="sheet" id="endSheet"></div></div>
 
@@ -546,6 +554,7 @@ function bombCost(c,ctx){
 }
 /* Winning the trick is worth something by itself: the winner leads next and can dump its weakest combo.
    LEAD is that value; it grows while the opponents keep winning tricks (they are running the table). */
+const BRK={lose:2.2,split:.45,sf:1.2,joker:1.1};
 const LEAD={base:.8,streak:.3,max:2.2,low:.8};
 function rankMoves(p,blind){
   EVC=new Map();
@@ -565,6 +574,18 @@ function rankMoves(p,blind){
       const lowLead=(last.combo.type==='single'||last.combo.type==='pair')&&last.combo.v<=10;
       s-=(val+(lowLead?LEAD.low:0))*(1-0.5*beatProb(c.combo,p));
     }
+    if(!c.combo.bomb){                 // breaking up or shrinking a natural bomb for an ordinary play
+      const used={};c.cards.forEach(x=>{if(!isWild(x)&&x.r<=14)used[x.r]=(used[x.r]||0)+1;});
+      for(const r in used){const have=hand.filter(x=>!isWild(x)&&x.r==r).length;
+        if(have>=4){const left=have-used[r];s+=left>=4?0.35*used[r]:BRK.lose*(oppMin>=9?1:oppMin>=5?.6:.25);}}
+      // splitting a natural pair/triple to play a single/pair early (keeps the hand's structure)
+      if((c.combo.type==='single'||c.combo.type==='pair')&&oppMin>5)
+        for(const r in used){const have=hand.filter(x=>!isWild(x)&&x.r==r).length;if(have>used[r]&&have<=3)s+=BRK.split;}
+      // breaking a natural straight flush for a non-bomb play
+      if(oppMin>5){const ids=new Set(c.cards.map(x=>x.id));if(sfOptions(hand).some(o=>!o.miss&&o.ids.some(i=>ids.has(i))))s+=BRK.sf;}
+    }
+    if(last&&!c.combo.bomb&&c.combo.type==='single'&&c.combo.v>=16&&last.combo.v<=11)
+      s+=BRK.joker*(oppMin>=12?1:oppMin>=8?.6:oppMin>=4?.25:0);
     if(c.wilds&&!c.combo.bomb){       // 逢人配 is the bomb/straight-flush maker: spend it on ordinary plays only late
       const m=oppMin,f=m>=13?2.6:m>=9?1.9:m>=6?1.1:m>=3?.4:.1;
       s+=c.wilds*1.6*f;}
@@ -576,7 +597,7 @@ function rankMoves(p,blind){
     if(after<=0.6)s-=1.2;
     if(!blind)s+=riskOf(c.combo,opps,u);
     if(!last&&partnerIn&&S.hands[partner].length<=2&&oppMin>2){
-      if(S.hands[partner].length===1&&t==='single'&&v<=9)s-=1.5;
+      if(S.hands[partner].length===1&&t==='single'&&v<=9)s-=2.5;
       if(S.hands[partner].length===2&&t==='pair'&&v<=9)s-=1.2;
     }
     return {c,s,after};
@@ -606,7 +627,7 @@ function rankMoves(p,blind){
    noise  – random error added to each move's score (misjudges which play is better)
    blind  – ignores card counting and the danger of opponents about to go out
    greedy – plays the first legal move that beats the table more often instead of passing to save strength */
-const LEVELS={easy:{noise:1.6,blind:true,greedy:.45},mid:{noise:.55,blind:false,greedy:.12},hard:{noise:0,blind:false,greedy:0}};
+const LEVELS={easy:{noise:2.2,blind:true,greedy:.55},mid:{noise:.9,blind:false,greedy:.2},hard:{noise:0,blind:false,greedy:0}};
 let AIL='hard';
 function setAILevel(k){if(LEVELS[k])AIL=k;}
 let RNG=Math.random;
@@ -681,7 +702,7 @@ function endHand(order){
   S.levelTeam=win;S.prevOrder=order;S.phase=gameWon?'over':'end';S.result={order,win,up,gameWon};
   render();
 }
-function schedule(){clearTimeout(timer);if(S.phase!=='play')return;if(S.cur!==0)timer=setTimeout(aiMove,900);}
+function schedule(){clearTimeout(timer);if(DEAL||S.phase!=='play')return;if(S.cur!==0)timer=setTimeout(aiMove,900);}
 
 /* ---------- tribute ---------- */
 function tributeCard(g,to){
@@ -717,10 +738,43 @@ function doTribute(){
   });
   return {lead:tops[0].g,note:lines.join('；'),pending};
 }
+/* Dealing animation. The deal itself is instant and deterministic (seeded); DEAL only controls how many of
+   each seat's 27 cards are shown, rising in rounds at 3-9 cards per second, and holds the turn timer. */
+let DEAL=null;
+function dealShown(p){return DEAL?Math.min(DEAL.n,S.hands[p].length):S.hands[p].length;}
+function startDealAnim(after){
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if(reduce||!S.hands){after&&after();return;}
+  DEAL={n:0,after,t:null,rnd:mulberry32(hashStr(S.seed+'#deal'+S.handNo))};
+  $('#deck').hidden=false;$('#btnSkipDeal').hidden=false;document.querySelector('.center').style.visibility='hidden';
+  const seatEl=p=>p===0?$('#hand'):$('#seat'+p+' .who');
+  const step=()=>{
+    if(!DEAL)return;
+    const rate=3+Math.floor(DEAL.rnd()*7);              // 3..9 cards per second for this round
+    for(let p=0;p<4;p++){                                // one card to each seat, dealer order 下家→对家→上家→你
+      const q=(p+1)%4,src=$('#deck').getBoundingClientRect(),dst=seatEl(q).getBoundingClientRect();
+      const f=document.createElement('div');f.className='fly';
+      f.style.left=(src.left+src.width/2)+'px';f.style.top=(src.top+src.height/2)+'px';document.body.appendChild(f);
+      requestAnimationFrame(()=>{f.style.transform=`translate(${dst.left+dst.width/2-src.left-src.width/2}px,${dst.top+dst.height/2-src.top-src.height/2}px) scale(.8)`;f.style.opacity='.2';});
+      setTimeout(()=>f.remove(),360);
+    }
+    DEAL.n++;$('#deckN').textContent=108-DEAL.n*4;
+    render();
+    if(DEAL.n>=27)return finishDeal();
+    DEAL.t=setTimeout(step,Math.round(4000/rate));       // 4 cards per round at `rate` cards/s
+  };
+  render();DEAL.t=setTimeout(step,250);
+}
+function finishDeal(){
+  if(!DEAL)return;clearTimeout(DEAL.t);const a=DEAL.after;DEAL=null;
+  $('#deck').hidden=true;$('#btnSkipDeal').hidden=true;document.querySelector('.center').style.visibility='';document.querySelectorAll('.fly').forEach(e=>e.remove());
+  render();a&&a();
+}
 function deal(){
   S.handNo=(S.handNo||0)+1;
   const d=shuffle(newDeck(),mulberry32(hashStr(S.seed+'#'+S.handNo)));
   S.hands=[0,1,2,3].map(i=>d.slice(i*27,i*27+27));
+  S.dealOrder0=S.hands[0].slice();
   Object.assign(S,{out:[],last:null,passed:[],played:[],tricks:[],table:{},sel:[],hintI:-1,newIds:[],groups:[],phase:'play',result:null,msg:'',ret:null});
   let lead=0;
   if(S.prevOrder){const t=doTribute();lead=t.lead;S.msg=t.note;
@@ -758,6 +812,7 @@ function cardSpan(c){
 function renderAdvice(){
   const el=$('#advice');
   if(!pref.adv){el.innerHTML='<span class="idle">AI推荐已关闭，点右上角“AI推荐”打开</span>';return;}
+  if(DEAL){el.innerHTML='<span class="idle">发牌中…</span>';return;}
   const mine=(S.phase==='play'&&S.cur===0)||S.phase==='return';
   if(!mine){el.innerHTML=`<span class="idle">${S.phase==='play'?'轮到你时这里显示推荐出法':''}</span>`;return;}
   const items=adviceItems();
@@ -784,7 +839,7 @@ function playTag(combo,n){
   return ['single','pair'].includes(combo.type)?'':`<div class="tag">${TYPE_N[combo.type]}</div>`;
 }
 function renderSeat(p){
-  const el=$('#seat'+p),n=S.hands[p].length,oi=S.out.indexOf(p);
+  const el=$('#seat'+p),n=dealShown(p),oi=S.out.indexOf(p);
   el.classList.toggle('turn',S.phase==='play'&&S.cur===p);
   const t=S.table[p];
   const play=t==='pass'?'<span class="pass">不出</span>':t?t.cards.slice().sort((a,b)=>cv(b)-cv(a)).map(c=>cardHTML(c,true)).join('')+playTag(t.combo,t.cards.length):'';
@@ -792,7 +847,7 @@ function renderSeat(p){
   el.innerHTML=`<div class="who"><span class="name">${NAMES[p]}</span>${info}</div><div class="played">${play}</div>`;
 }
 function renderHand(){
-  const el=$('#hand'),hand=S.hands[0],byId=Object.fromEntries(hand.map(c=>[c.id,c]));
+  const el=$('#hand'),hand=DEAL?S.dealOrder0.slice(0,dealShown(0)):S.hands[0],byId=Object.fromEntries(hand.map(c=>[c.id,c]));
   const inG=new Set(S.groups.flat());
   const cols=S.groups.map((g,gi)=>({cards:g.map(i=>byId[i]).filter(Boolean),g:gi})).filter(c=>c.cards.length);
   const key=c=>c.r>15?c.r:val(c.r),so=c=>isWild(c)?9:SUITS.indexOf(c.s),m=new Map();
@@ -821,10 +876,11 @@ function render(){
   $('#lvBig').textContent=rankName(L());$('#lvWho').textContent=S.levelTeam===0?'我方的级':'对方的级';
   let st='';
   if(S.phase==='return')st=`选一张 10 以下的牌还给${NAMES[S.ret.to]}`;
+  if(DEAL)st='';
   else if(S.phase==='play')st=S.cur===0?(S.last?`管上${NAMES[S.last.p]}的牌，或者不出`:'轮到你出牌'):`${NAMES[S.cur]}出牌中…`;
   $('#status').textContent=st;$('#note').textContent=S.msg||'';
   [0,1,2,3].forEach(renderSeat);renderHand();renderAdvice();
-  const ret=S.phase==='return',my=S.phase==='play'&&S.cur===0;
+  const ret=S.phase==='return'&&!DEAL,my=S.phase==='play'&&S.cur===0&&!DEAL;
   $('#btnPlay').textContent=ret?'还贡':'出牌';
   $('#btnPlay').disabled=ret?S.sel.length!==1:(!my||!S.sel.length);
   $('#btnPass').disabled=!my||!S.last;$('#btnHint').disabled=!(my||ret);
@@ -834,12 +890,13 @@ function render(){
     $('#endSheet').innerHTML=`<h2>${title}</h2><div class="order">${r.order.map((q,i)=>`<span class="k">${PLACE[i]}</span><span class="${q%2===0?'mine':''}">${NAMES[q]}${q===2?'（队友）':''}</span>`).join('')}</div>
       <p>种子 ${S.seed} · 第${S.handNo}局。${r.gameWon?'整盘结束。':`我方打 ${rankName(S.level[0])}，对方打 ${rankName(S.level[1])}。下一局打 <b style="color:var(--gold)">${rankName(L())}</b>，${mine?'我方':'对方'}坐庄。`}</p>
       <button class="btn pri" id="btnNext">${r.gameWon?'再来一盘':'下一局'}</button>`;
-    $('#btnNext').onclick=()=>{if(r.gameWon)newGame();else deal();render();schedule();if(S.msg)toast(S.msg,5000);};}
+    $('#btnNext').onclick=()=>{if(r.gameWon)newGame();else deal();startDealAnim(()=>{render();schedule();if(S.msg)toast(S.msg,5000);});};}
 }
 function toast(t,ms=1800){const el=$('#toast');el.textContent=t;el.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>el.hidden=true,ms);}
 
 /* ---------- input ---------- */
 $('#hand').addEventListener('click',e=>{
+  if(DEAL)return;
   if(S.phase!=='play'&&S.phase!=='return')return;
   const gb=e.target.closest('.gbar');
   if(gb){const g=S.groups[+gb.dataset.g]||[],all=g.every(i=>S.sel.includes(i));
@@ -883,9 +940,9 @@ $('#btnAuto').onclick=()=>{
 $('#btnReset').onclick=()=>{S.groups=[];render();};
 $('#btnAdv').onclick=()=>{pref.adv=!pref.adv;savePref();render();};
 $('#lvSel').addEventListener('click',e=>{const b=e.target.closest('button[data-lv]');if(!b)return;
-  setAILevel(b.dataset.lv);pref.lv=AIL;savePref();render();toast({easy:'低级 AI：对高级胜率约 28%，适合熟悉规则',mid:'中级 AI：对高级胜率约 45%，会记牌',hard:'高级 AI：全力计算，记牌并按局势用炸弹'}[AIL],2600);});
+  setAILevel(b.dataset.lv);pref.lv=AIL;savePref();render();toast({easy:'低级 AI：对高级胜率约 27%，适合熟悉规则',mid:'中级 AI：对高级胜率约 43%，会记牌',hard:'高级 AI：全力计算，记牌并按局势用炸弹'}[AIL],2600);});
 $('#btnDuo').onclick=()=>{pref.duo=!pref.duo;savePref();render();};
-function startSeed(seed,msg){clearTimeout(timer);newGame(seed);$('#seedOv').hidden=true;render();schedule();toast(msg||`种子 ${S.seed}，第 1 局开始`,2400);}
+function startSeed(seed,msg){clearTimeout(timer);finishDeal();newGame(seed);$('#seedOv').hidden=true;startDealAnim(()=>{render();schedule();toast(msg||`种子 ${S.seed}，第 1 局开始`,2400);});}
 $('#btnSeed').onclick=()=>{$('#seedIn').value='';$('#seedOv').hidden=false;};
 $('#btnSeedClose').onclick=()=>{$('#seedOv').hidden=true;};
 $('#seedIn').addEventListener('input',e=>{const v=normSeed(e.target.value);if(v!==e.target.value)e.target.value=v;});
@@ -899,6 +956,7 @@ $('#btnCopySeed').onclick=()=>{
   const fallback=()=>{const r=document.createRange();r.selectNodeContents($('#seedBig'));const s=getSelection();s.removeAllRanges();s.addRange(r);toast('复制不了，已选中种子，请手动复制');};
   try{navigator.clipboard.writeText(text).then(ok,fallback);}catch(e){fallback();}};
 addEventListener('hashchange',()=>{const v=normSeed(location.hash.slice(1));if(v&&v!==S.seed)startSeed(v,`换成种子 ${v}，第 1 局开始`);});
+$('#btnSkipDeal').onclick=()=>finishDeal();
 $('#btnRules').onclick=()=>{$('#rulesOv').hidden=false;};
 $('#btnRulesClose').onclick=()=>{$('#rulesOv').hidden=true;};
 let newArm=null;
@@ -914,8 +972,10 @@ function start(data){
   if(!S.played)S.played=[];if(!S.groups)S.groups=[];
   if(!S.seed){S.seed=randomSeed();S.handNo=1;syncHash();}
   window.claude?.hot?.snapshot?.(()=>({S}));
-  render();schedule();
-  if(!data||!data.S)toast(fromHash?`种子 ${S.seed}，第 1 局开始`:'你先出牌。你和对家一队，点“规则”看玩法',3200);
+  if(!S.dealOrder0)S.dealOrder0=S.hands[0].slice();
+  const fresh=!data||!data.S;
+  const go=()=>{render();schedule();if(fresh)toast(fromHash?`种子 ${S.seed}，第 1 局开始`:'你先出牌。你和对家一队，点“规则”看玩法',3200);};
+  if(fresh)startDealAnim(go);else go();
 }
 window.claude?.hot?.ready?window.claude.hot.ready(start):start(window.claude?.hot?.data??{});
 </script>
