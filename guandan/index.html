@@ -144,6 +144,13 @@ body{background:radial-gradient(ellipse 80% 60% at 50% 38%,var(--felt-2),var(--f
 .sheet p{margin:0;font-size:14px;line-height:1.7;color:var(--ink)}
 .rules{font-size:14px;line-height:1.75;margin:0;padding-left:1.2em}
 .rules b{color:var(--gold);font-weight:500}
+.netseats{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.netseats li{display:flex;align-items:baseline;gap:8px;padding:8px 12px;border:1px solid var(--line);border-radius:10px;font-size:14px}
+.netseats .k{color:var(--muted);font-size:12px}.netseats small{margin-left:auto;color:var(--gold);font-size:11px}
+.netrow{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.netrow input{font:inherit;font-size:16px;padding:8px 12px;border-radius:8px;border:1px solid var(--line);background:rgba(255,255,255,.06);color:var(--ink);min-width:0;flex:1}
+#netCodeIn{font-family:var(--f-card);letter-spacing:.2em;text-transform:uppercase;max-width:9em}
+.netcode{font-family:var(--f-card);font-size:34px;letter-spacing:.2em;color:var(--gold);user-select:all;-webkit-user-select:all}
 .seedrow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;border:1px dashed var(--gold);border-radius:10px}
 .seedrow code{font-family:var(--f-card);font-size:34px;font-weight:600;letter-spacing:.16em;color:var(--gold);user-select:all;-webkit-user-select:all;min-width:0;overflow-wrap:anywhere}
 .fld{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted)}
@@ -172,6 +179,7 @@ body{background:radial-gradient(ellipse 80% 60% at 50% 38%,var(--felt-2),var(--f
     <div class="lvsel" id="lvSel" role="group" aria-label="AI 难度"><button data-lv="easy" title="对高级胜率约 27%，适合熟悉规则">低</button><button data-lv="mid" title="对高级胜率约 43%，会记牌">中</button><button data-lv="hard" title="全力计算，记牌并按局势用炸弹">高</button></div>
     <button class="lnk" id="btnAdv">AI推荐</button>
     <button class="lnk" id="btnDuo">四色牌</button>
+    <button class="lnk" id="btnNet">联机</button>
     <button class="lnk" id="btnRules">规则</button>
     <button class="lnk" id="btnNew">重开</button>
   </header>
@@ -231,6 +239,24 @@ body{background:radial-gradient(ellipse 80% 60% at 50% 38%,var(--felt-2),var(--f
   <p class="hint">开新一盘会放弃当前进度。AI 的出牌没有随机成分，所以你出牌一样，整盘的走向也会完全一样。</p>
 </div></div>
 
+<div class="ov" id="netOv" hidden><div class="sheet">
+  <h2>和朋友一起打</h2>
+  <p>一人开房，把房间号发给朋友。最多 4 人，空位由电脑来打。房主的网页要一直开着，牌局在房主这边运行。</p>
+  <label class="fld" for="netName">你的昵称<input id="netName" maxlength="8" placeholder="最多 8 个字" autocomplete="off"></label>
+  <div id="netLobby" hidden>
+    <div class="seedrow"><span>房间号</span><span class="netcode" id="netCode">----</span><button class="btn sm" id="netCopy">复制链接</button></div>
+    <ul class="netseats" id="netSeats"></ul>
+    <p class="hint" id="netStatus"></p>
+    <div class="grp"><button class="btn pri" id="netStart" hidden>开局</button><button class="btn sm" id="netLeave">退出房间</button></div>
+  </div>
+  <div id="netEntry">
+    <div class="grp"><button class="btn pri" id="netHostBtn">开一个房间</button></div>
+    <div class="netrow"><input id="netCodeIn" maxlength="5" placeholder="房间号" autocomplete="off" spellcheck="false"><button class="btn" id="netJoinBtn">加入</button></div>
+  </div>
+  <p class="hint">点对点连接，不经过服务器存储牌局。有些网络（比如公司网、部分国内宽带）可能连不上，连不上时换个网络再试。</p>
+  <button class="btn sm" id="netClose">关闭</button>
+</div></div>
+
 <div class="ov" id="rulesOv" hidden><div class="sheet">
   <h2>怎么玩</h2>
   <ul class="rules">
@@ -250,7 +276,12 @@ body{background:radial-gradient(ellipse 80% 60% at 50% 38%,var(--felt-2),var(--f
 <script>
 const $=s=>document.querySelector(s);
 const SUITS=['S','H','C','D'], SCH={S:'♠',H:'♥',C:'♣',D:'♦'};
-const NAMES=['你','下家','对家','上家'];
+const REL=['你','下家','对家','上家'];
+let ME=0;                                   // which absolute seat this browser controls (0 offline / host)
+const NET={role:null,peer:null,conns:[],seatOf:{},names:['','','',''],human:[true,false,false,false],code:''};
+/* NAMES[abs] = label as seen from this browser; online players' nicknames follow the relative label */
+const NAMES=new Proxy([],{get(t,k){if(k==='length')return 4;const i=+k;if(!(i>=0&&i<4))return Reflect.get(t,k);
+  const rel=REL[(i-ME+4)%4];return NET.role&&NET.names[i]&&i!==ME?rel+'·'+NET.names[i]:rel;}});
 const PLACE=['头游','二游','三游','末游'];
 const TYPE_N={single:'单张',pair:'对子',triple:'三张',fh:'三带二',straight:'顺子',pairs3:'三连对',plate:'钢板',sf:'同花顺',jokerbomb:'天王炸'};
 const RANKS=[2,3,4,5,6,7,8,9,10,11,12,13,14,16,17];
@@ -641,7 +672,7 @@ function decide(p){
   if(L.greedy&&RNG()<L.greedy&&!best.c.combo.bomb)return best.c;
   return best.s<passScore?best.c:null;
 }
-function aiMove(){const p=S.cur;if(S.phase!=='play'||p===0)return;const c=decide(p);act(p,c?c.cards:null,c?c.combo:null);}
+function aiMove(){const p=S.cur;if(S.phase!=='play'||NET.human[p])return;const c=decide(p);act(p,c?c.cards:null,c?c.combo:null);}
 
 /* ---------- auto-arrange (理牌) ---------- */
 function planHand(hand){
@@ -667,6 +698,98 @@ function planHand(hand){
 }
 
 /* ---------- flow ---------- */
+/* ---------- online play (PeerJS, host-authoritative) ----------
+   The host's browser owns the game state and runs the computer seats. Guests send their moves; after every
+   change the host sends each guest the full state, with the other players' hands replaced by card counts. */
+const PEER_PREFIX='mindresort-gd-';
+function netSend(c,m){try{if(c&&c.open)c.send(m);}catch(e){}}
+function viewFor(seat){
+  const v=JSON.parse(JSON.stringify(S));
+  v.hands=S.hands.map((h,i)=>i===seat?h:h.map(()=>({id:-1,r:0,s:'X'})));
+  v.dealOrders=S.dealOrders?S.dealOrders.map((h,i)=>i===seat?h:[]):null;
+  v.sel=[];v.groups=[];v.dealOrder0=null;
+  return v;
+}
+function netBroadcast(deal){
+  if(NET.role!=='host')return;
+  NET.conns.forEach(c=>{const seat=NET.seatOf[c.peer];if(seat==null)return;
+    netSend(c,{t:'state',S:viewFor(seat),names:NET.names,human:NET.human,deal:!!deal,seat});});
+}
+function lobbyRender(){
+  const el=$('#netSeats');if(!el)return;
+  el.innerHTML=[0,1,2,3].map(i=>{const who=NET.human[i]?(i===ME?'你':(NET.names[i]||'朋友')):'电脑';
+    return `<li><span class="k">${REL[(i-ME+4)%4]}</span><b>${who}</b>${i===(ME+2)%4?'<small>队友</small>':''}</li>`;}).join('');
+  $('#netCode').textContent=NET.code||'----';
+  $('#netStart').hidden=NET.role!=='host';
+  $('#netStatus').textContent=NET.role==='host'?`房间已开，${NET.conns.length} 位朋友已加入。空位由电脑来打。`:NET.role==='guest'?'已加入，等房主开局。':'';
+}
+function netCleanup(){try{NET.peer&&NET.peer.destroy();}catch(e){}NET.role=null;NET.peer=null;NET.conns=[];NET.seatOf={};NET.human=[true,false,false,false];NET.names=['','','',''];NET.code='';ME=0;}
+function needPeer(){return new Promise((res,rej)=>{
+  if(window.Peer)return res();
+  const sc=document.createElement('script');sc.src='https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js';
+  sc.onload=()=>res();sc.onerror=()=>rej(new Error('联机组件加载失败，请检查网络'));document.head.appendChild(sc);});}
+async function netHost(){
+  await needPeer();netCleanup();
+  const code=Array.from({length:5},()=>SEED_ABC[Math.floor(Math.random()*SEED_ABC.length)]).join('');
+  NET.role='host';NET.code=code;NET.names[0]=$('#netName').value.trim().slice(0,8)||'房主';
+  const peer=new Peer(PEER_PREFIX+code);NET.peer=peer;
+  peer.on('open',()=>{lobbyRender();toast('房间号 '+code+'，发给朋友',3000);});
+  peer.on('error',e=>{toast('联机出错：'+(e.type||e.message||e),4000);if(e.type==='unavailable-id')netHost();});
+  peer.on('connection',c=>{
+    c.on('open',()=>{
+      const free=[2,1,3].find(i=>!NET.human[i]);                      // partner seat first
+      if(free==null||S&&S.phase==='play'&&NET.started){netSend(c,{t:'full'});setTimeout(()=>c.close(),300);return;}
+      NET.conns.push(c);NET.seatOf[c.peer]=free;NET.human[free]=true;lobbyRender();
+    });
+    c.on('data',m=>netOnHost(c,m));
+    c.on('close',()=>{const seat=NET.seatOf[c.peer];NET.conns=NET.conns.filter(x=>x!==c);delete NET.seatOf[c.peer];
+      if(seat!=null){NET.human[seat]=false;NET.names[seat]='';toast(NAMES[seat]+' 掉线了，改由电脑接手',3000);schedule();netBroadcast();}
+      lobbyRender();});
+  });
+}
+function netOnHost(c,m){
+  const seat=NET.seatOf[c.peer];if(seat==null)return;
+  if(m.t==='hello'){NET.names[seat]=String(m.name||'').slice(0,8);lobbyRender();netBroadcast();return;}
+  if(m.t==='act'&&S.phase==='play'&&S.cur===seat&&!DEAL){
+    if(!m.ids){if(S.last)act(seat,null,null);return;}
+    const cards=S.hands[seat].filter(x=>m.ids.includes(x.id));if(cards.length!==m.ids.length)return;
+    const res=analyze(cards),combo=pickInterp(res,S.last);if(!combo)return;
+    act(seat,cards,combo);return;}
+  if(m.t==='ret'&&S.phase==='return'&&S.ret.from===seat){
+    const c2=S.hands[seat].find(x=>x.id===m.id);if(c2&&returnPool(S.hands[seat]).some(x=>x.id===c2.id))doReturn(seat,c2);}
+}
+async function netJoin(code){
+  code=normSeed(code).slice(0,5);if(code.length<5)return toast('房间号是 5 位字母或数字');
+  await needPeer();netCleanup();NET.role='guest';NET.code=code;
+  const peer=new Peer();NET.peer=peer;
+  peer.on('error',e=>{toast(e.type==='peer-unavailable'?'找不到这个房间，检查房间号':'联机出错：'+(e.type||e),4000);});
+  peer.on('open',()=>{
+    const c=peer.connect(PEER_PREFIX+code,{reliable:true});NET.conns=[c];
+    c.on('open',()=>{netSend(c,{t:'hello',name:$('#netName').value.trim().slice(0,8)||'朋友'});lobbyRender();});
+    c.on('data',m=>{
+      if(m.t==='full'){toast('房间满了，或者已经开局');return;}
+      if(m.t==='state'){ME=m.seat;NET.names=m.names;NET.human=m.human;
+        const fresh=!S||m.S.handNo!==S.handNo||m.S.seed!==S.seed;
+        S=m.S;if(!S.groups)S.groups=[];if(!S.sel)S.sel=[];
+        $('#netOv').hidden=true;
+        if(m.deal&&fresh)startDealAnim(()=>render());else render();}
+    });
+    c.on('close',()=>{toast('和房主的连接断开了',4000);netCleanup();});
+  });
+}
+function netStartGame(){
+  NET.started=true;$('#netOv').hidden=true;clearTimeout(timer);finishDeal();
+  newGame(null);netBroadcast(true);startDealAnim(()=>{render();schedule();netBroadcast();});
+}
+function sendAct(p,cards,combo){
+  if(NET.role==='guest'){netSend(NET.conns[0],{t:'act',ids:cards?cards.map(c=>c.id):null});S.sel=[];render();return;}
+  act(p,cards,combo);
+}
+function doReturn(p,c){
+  moveCard(p,S.ret.to,c);S.phase='play';S.cur=S.ret.lead;S.msg=`${NAMES[p]}还了${cardTxt(c)}给${NAMES[S.ret.to]}`;
+  if(p===ME){S.sel=[];pruneGroups();}
+  render();schedule();netBroadcast();
+}
 function act(p,cards,combo){
   if(!S.last)S.table={};
   S.msg='';
@@ -675,8 +798,9 @@ function act(p,cards,combo){
     S.last={p,combo,cards};S.passed=[];S.table[p]={cards,combo};S.played.push(...cards);
     if(!S.hands[p].length)S.out.push(p);
   }else{S.passed.push(p);S.table[p]='pass';}
-  if(p===0){S.sel=[];S.hintI=-1;S.newIds=[];pruneGroups();}
+  if(p===ME){S.sel=[];S.hintI=-1;S.newIds=[];pruneGroups();}
   advance();
+  netBroadcast();
 }
 function checkOver(){
   for(const t of [0,1])if(S.out.filter(q=>q%2===t).length===2)
@@ -691,7 +815,7 @@ function advance(){
     if(S.out.includes(lp)){const pt=(lp+2)%4;lead=S.out.includes(pt)?nextActive(lp):pt;}
     (S.tricks||(S.tricks=[])).push(lp%2);
     S.last=null;S.passed=[];S.cur=lead;
-    if(lead===0&&lp===2)S.msg='对家出完了，你来接风';
+    if(S.out.includes(lp)&&lead===(lp+2)%4)S.msg=NAMES[lp]+'出完了，'+NAMES[lead]+'接风';
   }else S.cur=nextActive(S.cur);
   render();schedule();
 }
@@ -702,7 +826,7 @@ function endHand(order){
   S.levelTeam=win;S.prevOrder=order;S.phase=gameWon?'over':'end';S.result={order,win,up,gameWon};
   render();
 }
-function schedule(){clearTimeout(timer);if(DEAL||S.phase!=='play')return;if(S.cur!==0)timer=setTimeout(aiMove,900);}
+function schedule(){clearTimeout(timer);if(DEAL||S.phase!=='play'||NET.role==='guest')return;if(!NET.human[S.cur])timer=setTimeout(aiMove,900);}
 
 /* ---------- tribute ---------- */
 function tributeCard(g,to){
@@ -732,8 +856,8 @@ function doTribute(){
   if(dbl)tops.sort((x,y)=>y.v-x.v);
   const recv=dbl?[a,b]:[a],lines=[];let pending=null;
   tops.forEach((t,i)=>{const r=recv[i],card=tributeCard(t.g,r);moveCard(t.g,r,card);
-    lines.push(`${NAMES[t.g]}进贡${cardTxt(card)}给${NAMES[r]}`);if(r===0)S.newIds.push(card.id);
-    if(r===0)pending={to:t.g};
+    lines.push(`${NAMES[t.g]}进贡${cardTxt(card)}给${NAMES[r]}`);S.newIds.push(card.id);
+    if(NET.human[r])pending={to:t.g,from:r};
     else{const back=scoreReturns(r,t.g)[0].c;moveCard(r,t.g,back);lines.push(`${NAMES[r]}还${cardTxt(back)}`);if(t.g===0)S.newIds.push(back.id);}
   });
   return {lead:tops[0].g,note:lines.join('；'),pending};
@@ -774,32 +898,32 @@ function deal(){
   S.handNo=(S.handNo||0)+1;
   const d=shuffle(newDeck(),mulberry32(hashStr(S.seed+'#'+S.handNo)));
   S.hands=[0,1,2,3].map(i=>d.slice(i*27,i*27+27));
-  S.dealOrder0=S.hands[0].slice();
+  S.dealOrder0=S.hands[0].slice();S.dealOrders=S.hands.map(h=>h.slice());
   Object.assign(S,{out:[],last:null,passed:[],played:[],tricks:[],table:{},sel:[],hintI:-1,newIds:[],groups:[],phase:'play',result:null,msg:'',ret:null});
   let lead=0;
   if(S.prevOrder){const t=doTribute();lead=t.lead;S.msg=t.note;
-    if(t.pending){S.phase='return';S.ret={to:t.pending.to,lead};S.msg=t.note+`。选一张牌还给${NAMES[t.pending.to]}`;}}
+    if(t.pending){S.phase='return';S.ret={to:t.pending.to,from:t.pending.from,lead};S.msg=t.note+`。选一张牌还给${NAMES[t.pending.to]}`;}}
   S.cur=lead;
 }
 function newGame(seed){S={level:{0:2,1:2},levelTeam:0,prevOrder:null,seed:normSeed(seed)||randomSeed(),handNo:0};deal();syncHash();}
-function pruneGroups(){const ids=new Set(S.hands[0].map(c=>c.id));S.groups=S.groups.map(g=>g.filter(i=>ids.has(i))).filter(g=>g.length);}
+function pruneGroups(){const ids=new Set(S.hands[ME].map(c=>c.id));S.groups=S.groups.map(g=>g.filter(i=>ids.has(i))).filter(g=>g.length);}
 
 /* ---------- AI advice for the human ---------- */
 let advCache={key:'',items:[]};
 const pct=x=>x<0.01?'<1%':Math.round(x*100)+'%';
 const turnsTxt=a=>a<=0.3?'后续很顺':`后续≈${a.toFixed(1)}手`;
 function adviceItems(){
-  const key=[S.phase,S.cur,S.played.length,S.hands[0].length,S.last?S.last.p:'-',S.passed.length,S.ret&&S.ret.to].join('|');
+  const key=[S.phase,S.cur,S.played.length,S.hands[ME].length,S.last?S.last.p:'-',S.passed.length,S.ret&&S.ret.to].join('|');
   if(advCache.key===key)return advCache.items;
   let items=[];
-  if(S.phase==='return'){
-    items=scoreReturns(0,S.ret.to).slice(0,4).map(x=>({cards:[x.c],
+  if(S.phase==='return'&&S.ret.from===ME){
+    items=scoreReturns(ME,S.ret.to).slice(0,4).map(x=>({cards:[x.c],
       meta:`${turnsTxt(x.after)} · 送炸<em>${pct(x.g.bomb)}</em> · 送同花顺<em>${pct(x.g.sf)}</em>`}));
-  }else if(S.phase==='play'&&S.cur===0){
-    const {list,passScore,passWhy}=rankMoves(0,false),seen=new Set(),picked=[];
+  }else if(S.phase==='play'&&S.cur===ME){
+    const {list,passScore,passWhy}=rankMoves(ME,false),seen=new Set(),picked=[];
     for(const m of list){const k=m.c.cards.map(cardTxt).sort().join();if(seen.has(k))continue;seen.add(k);picked.push(m);if(picked.length>=3)break;}
-    items=picked.map(m=>{const n=m.c.cards.length,fin=n===S.hands[0].length;
-      return {s:m.s,cards:m.c.cards,meta:fin?`${comboName(m.c.combo,n)} · 直接出完`:`${comboName(m.c.combo,n)} · ${turnsTxt(m.after)} · 被管<em>${pct(beatProb(m.c.combo,0))}</em>`};});
+    items=picked.map(m=>{const n=m.c.cards.length,fin=n===S.hands[ME].length;
+      return {s:m.s,cards:m.c.cards,meta:fin?`${comboName(m.c.combo,n)} · 直接出完`:`${comboName(m.c.combo,n)} · ${turnsTxt(m.after)} · 被管<em>${pct(beatProb(m.c.combo,ME))}</em>`};});
     if(S.last)items.push({s:passScore,pass:true,meta:passWhy});
     items.sort((a,b)=>a.s-b.s);items=items.slice(0,4);
   }
@@ -813,7 +937,7 @@ function renderAdvice(){
   const el=$('#advice');
   if(!pref.adv){el.innerHTML='<span class="idle">AI推荐已关闭，点右上角“AI推荐”打开</span>';return;}
   if(DEAL){el.innerHTML='<span class="idle">发牌中…</span>';return;}
-  const mine=(S.phase==='play'&&S.cur===0)||S.phase==='return';
+  const mine=(S.phase==='play'&&S.cur===ME)||(S.phase==='return'&&S.ret.from===ME);
   if(!mine){el.innerHTML=`<span class="idle">${S.phase==='play'?'轮到你时这里显示推荐出法':''}</span>`;return;}
   const items=adviceItems();
   el.innerHTML=`<span class="lab">${S.phase==='return'?'还贡推荐':'AI推荐'}</span>`+items.map((it,i)=>
@@ -839,15 +963,15 @@ function playTag(combo,n){
   return ['single','pair'].includes(combo.type)?'':`<div class="tag">${TYPE_N[combo.type]}</div>`;
 }
 function renderSeat(p){
-  const el=$('#seat'+p),n=dealShown(p),oi=S.out.indexOf(p);
+  const el=$('#seat'+((p-ME+4)%4)),n=dealShown(p),oi=S.out.indexOf(p);
   el.classList.toggle('turn',S.phase==='play'&&S.cur===p);
   const t=S.table[p];
   const play=t==='pass'?'<span class="pass">不出</span>':t?t.cards.slice().sort((a,b)=>cv(b)-cv(a)).map(c=>cardHTML(c,true)).join('')+playTag(t.combo,t.cards.length):'';
-  const info=oi>=0?`<span class="place">${PLACE[oi]}</span>`:p===0?'':`<span class="back"></span><span class="cnt ${n<=10?'warn':''}">${n}</span>`;
+  const info=oi>=0?`<span class="place">${PLACE[oi]}</span>`:p===ME?'':`<span class="back"></span><span class="cnt ${n<=10?'warn':''}">${n}</span>`;
   el.innerHTML=`<div class="who"><span class="name">${NAMES[p]}</span>${info}</div><div class="played">${play}</div>`;
 }
 function renderHand(){
-  const el=$('#hand'),hand=DEAL?S.dealOrder0.slice(0,dealShown(0)):S.hands[0],byId=Object.fromEntries(hand.map(c=>[c.id,c]));
+  const el=$('#hand'),hand=DEAL?(S.dealOrders?S.dealOrders[ME]:S.dealOrder0).slice(0,dealShown(ME)):S.hands[ME],byId=Object.fromEntries(hand.map(c=>[c.id,c]));
   const inG=new Set(S.groups.flat());
   const cols=S.groups.map((g,gi)=>({cards:g.map(i=>byId[i]).filter(Boolean),g:gi})).filter(c=>c.cards.length);
   const key=c=>c.r>15?c.r:val(c.r),so=c=>isWild(c)?9:SUITS.indexOf(c.s),m=new Map();
@@ -871,26 +995,28 @@ function render(){
   $('#btnAdv').classList.toggle('on',pref.adv);
   document.querySelectorAll('#lvSel button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.lv===AIL)));
   $('#seedTxt').textContent=S.seed;$('#handTxt').textContent=`第${S.handNo}局`;$('#seedBig').textContent=S.seed;
-  $('#lvUs').textContent=rankName(S.level[0]);$('#lvThem').textContent=rankName(S.level[1]);
-  $('#teamUs').classList.toggle('on',S.levelTeam===0);$('#teamThem').classList.toggle('on',S.levelTeam===1);
-  $('#lvBig').textContent=rankName(L());$('#lvWho').textContent=S.levelTeam===0?'我方的级':'对方的级';
+  $('#lvUs').textContent=rankName(S.level[ME%2]);$('#lvThem').textContent=rankName(S.level[1-ME%2]);
+  $('#teamUs').classList.toggle('on',S.levelTeam===ME%2);$('#teamThem').classList.toggle('on',S.levelTeam!==ME%2);
+  $('#lvBig').textContent=rankName(L());$('#lvWho').textContent=S.levelTeam===ME%2?'我方的级':'对方的级';
   let st='';
-  if(S.phase==='return')st=`选一张 10 以下的牌还给${NAMES[S.ret.to]}`;
+  if(S.phase==='return')st=S.ret.from===ME?`选一张 10 以下的牌还给${NAMES[S.ret.to]}`:`等${NAMES[S.ret.from]}还贡…`;
   if(DEAL)st='';
-  else if(S.phase==='play')st=S.cur===0?(S.last?`管上${NAMES[S.last.p]}的牌，或者不出`:'轮到你出牌'):`${NAMES[S.cur]}出牌中…`;
+  else if(S.phase==='play')st=S.cur===ME?(S.last?`管上${NAMES[S.last.p]}的牌，或者不出`:'轮到你出牌'):`${NAMES[S.cur]}出牌中…`;
   $('#status').textContent=st;$('#note').textContent=S.msg||'';
   [0,1,2,3].forEach(renderSeat);renderHand();renderAdvice();
-  const ret=S.phase==='return'&&!DEAL,my=S.phase==='play'&&S.cur===0&&!DEAL;
+  const ret=S.phase==='return'&&S.ret.from===ME&&!DEAL,my=S.phase==='play'&&S.cur===ME&&!DEAL;
   $('#btnPlay').textContent=ret?'还贡':'出牌';
   $('#btnPlay').disabled=ret?S.sel.length!==1:(!my||!S.sel.length);
   $('#btnPass').disabled=!my||!S.last;$('#btnHint').disabled=!(my||ret);
   const ov=$('#endOv');ov.hidden=!S.result;
-  if(S.result){const r=S.result,mine=r.win===0;
+  if(S.result){const r=S.result,mine=r.win===ME%2;
     const title=r.gameWon?(mine?'过A！我们赢了':'对方过A，这盘输了'):(mine?`我方升${r.up}级`:`对方升${r.up}级`);
-    $('#endSheet').innerHTML=`<h2>${title}</h2><div class="order">${r.order.map((q,i)=>`<span class="k">${PLACE[i]}</span><span class="${q%2===0?'mine':''}">${NAMES[q]}${q===2?'（队友）':''}</span>`).join('')}</div>
-      <p>种子 ${S.seed} · 第${S.handNo}局。${r.gameWon?'整盘结束。':`我方打 ${rankName(S.level[0])}，对方打 ${rankName(S.level[1])}。下一局打 <b style="color:var(--gold)">${rankName(L())}</b>，${mine?'我方':'对方'}坐庄。`}</p>
+    $('#endSheet').innerHTML=`<h2>${title}</h2><div class="order">${r.order.map((q,i)=>`<span class="k">${PLACE[i]}</span><span class="${q%2===ME%2?'mine':''}">${NAMES[q]}${q===(ME+2)%4?'（队友）':''}</span>`).join('')}</div>
+      <p>种子 ${S.seed} · 第${S.handNo}局。${r.gameWon?'整盘结束。':`我方打 ${rankName(S.level[ME%2])}，对方打 ${rankName(S.level[1-ME%2])}。下一局打 <b style="color:var(--gold)">${rankName(L())}</b>，${mine?'我方':'对方'}坐庄。`}</p>
       <button class="btn pri" id="btnNext">${r.gameWon?'再来一盘':'下一局'}</button>`;
-    $('#btnNext').onclick=()=>{if(r.gameWon)newGame();else deal();startDealAnim(()=>{render();schedule();if(S.msg)toast(S.msg,5000);});};}
+    $('#btnNext').hidden=NET.role==='guest';
+    if(NET.role==='guest')$('#btnNext').insertAdjacentHTML('afterend','<p class="hint">等房主开下一局…</p>');
+    $('#btnNext').onclick=()=>{if(r.gameWon)newGame();else deal();netBroadcast(true);startDealAnim(()=>{render();schedule();netBroadcast();if(S.msg)toast(S.msg,5000);});};}
 }
 function toast(t,ms=1800){const el=$('#toast');el.textContent=t;el.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>el.hidden=true,ms);}
 
@@ -902,7 +1028,8 @@ $('#hand').addEventListener('click',e=>{
   if(gb){const g=S.groups[+gb.dataset.g]||[],all=g.every(i=>S.sel.includes(i));
     S.sel=all?S.sel.filter(i=>!g.includes(i)):[...new Set([...S.sel,...g])];S.hintI=-1;render();return;}
   const c=e.target.closest('.card');if(!c)return;const id=+c.dataset.id;
-  if(S.phase==='return')S.sel=S.sel.includes(id)?[]:[id];
+  if(S.phase==='return'&&S.ret.from===ME)S.sel=S.sel.includes(id)?[]:[id];
+  else if(S.phase==='return')return;
   else S.sel=S.sel.includes(id)?S.sel.filter(x=>x!==id):[...S.sel,id];
   S.hintI=-1;render();});
 $('#advice').addEventListener('click',e=>{const b=e.target.closest('.adv');if(!b)return;
@@ -911,29 +1038,30 @@ $('#advice').addEventListener('click',e=>{const b=e.target.closest('.adv');if(!b
   S.sel=it.cards.map(c=>c.id);render();});
 $('#btnPlay').onclick=()=>{
   if(S.phase==='return'){
-    const c=S.hands[0].find(x=>x.id===S.sel[0]);if(!c)return toast('选一张牌还贡');
-    if(!returnPool(S.hands[0]).some(x=>x.id===c.id))return toast('还贡要选 10 以下的牌，不能用级牌和逢人配');
-    moveCard(0,S.ret.to,c);S.phase='play';S.cur=S.ret.lead;S.msg=`你还了${cardTxt(c)}给${NAMES[S.ret.to]}`;S.sel=[];pruneGroups();
-    render();schedule();return;}
-  if(S.cur!==0||S.phase!=='play')return;
-  const cards=S.hands[0].filter(c=>S.sel.includes(c.id)),res=analyze(cards);
+    if(S.ret.from!==ME)return;
+    const c=S.hands[ME].find(x=>x.id===S.sel[0]);if(!c)return toast('选一张牌还贡');
+    if(!returnPool(S.hands[ME]).some(x=>x.id===c.id))return toast('还贡要选 10 以下的牌，不能用级牌和逢人配');
+    if(NET.role==='guest'){netSend(NET.conns[0],{t:'ret',id:c.id});S.sel=[];render();return;}
+    doReturn(ME,c);return;}
+  if(S.cur!==ME||S.phase!=='play')return;
+  const cards=S.hands[ME].filter(c=>S.sel.includes(c.id)),res=analyze(cards);
   if(!res.length)return toast('这几张组不成牌型');
   const combo=pickInterp(res,S.last);if(!combo)return toast('管不上，换几张试试');
-  act(0,cards,combo);};
-$('#btnPass').onclick=()=>{if(S.cur===0&&S.last&&S.phase==='play')act(0,null,null);};
+  sendAct(ME,cards,combo);};
+$('#btnPass').onclick=()=>{if(S.cur===ME&&S.last&&S.phase==='play')sendAct(ME,null,null);};
 $('#btnHint').onclick=()=>{
-  if(S.phase==='return'){const r=scoreReturns(0,S.ret.to);S.hintI=(S.hintI+1)%Math.min(r.length,4);S.sel=[r[S.hintI].c.id];render();return;}
-  if(S.cur!==0)return;
-  const {list}=rankMoves(0);
+  if(S.phase==='return'){if(S.ret.from!==ME)return;const r=scoreReturns(ME,S.ret.to);S.hintI=(S.hintI+1)%Math.min(r.length,4);S.sel=[r[S.hintI].c.id];render();return;}
+  if(S.cur!==ME)return;
+  const {list}=rankMoves(ME);
   if(!list.length){S.sel=[];render();return toast('没有能管上的牌，点“不出”');}
   S.hintI=(S.hintI+1)%Math.min(list.length,12);S.sel=list[S.hintI].c.cards.map(x=>x.id);render();};
 $('#btnGroup').onclick=()=>{
   if(!S.sel.length)return toast('先选中要放在一起的牌，再点“组牌”');
   const sel=new Set(S.sel);S.groups=S.groups.map(g=>g.filter(i=>!sel.has(i))).filter(g=>g.length);
-  const byId=Object.fromEntries(S.hands[0].map(c=>[c.id,c]));
+  const byId=Object.fromEntries(S.hands[ME].map(c=>[c.id,c]));
   S.groups.push(S.sel.slice().sort((a,b)=>cv(byId[b])-cv(byId[a])));S.sel=[];render();};
 $('#btnAuto').onclick=()=>{
-  const g=planHand(S.hands[0]);S.groups=g.map(x=>x.ids);S.sel=[];render();
+  const g=planHand(S.hands[ME]);S.groups=g.map(x=>x.ids);S.sel=[];render();
   if(!g.length)return toast('没理出同花顺、炸弹或连牌，按点数排列');
   const cnt={};g.forEach(x=>cnt[x.kind]=(cnt[x.kind]||0)+1);
   toast('理出 '+Object.entries(cnt).map(([k,v])=>`${k}×${v}`).join('、'),2600);};
@@ -943,7 +1071,7 @@ $('#lvSel').addEventListener('click',e=>{const b=e.target.closest('button[data-l
   setAILevel(b.dataset.lv);pref.lv=AIL;savePref();render();toast({easy:'低级 AI：对高级胜率约 27%，适合熟悉规则',mid:'中级 AI：对高级胜率约 43%，会记牌',hard:'高级 AI：全力计算，记牌并按局势用炸弹'}[AIL],2600);});
 $('#btnDuo').onclick=()=>{pref.duo=!pref.duo;savePref();render();};
 function startSeed(seed,msg){clearTimeout(timer);finishDeal();newGame(seed);$('#seedOv').hidden=true;startDealAnim(()=>{render();schedule();toast(msg||`种子 ${S.seed}，第 1 局开始`,2400);});}
-$('#btnSeed').onclick=()=>{$('#seedIn').value='';$('#seedOv').hidden=false;};
+$('#btnSeed').onclick=()=>{if(NET.role)return toast('联机时由房主控制牌局');$('#seedIn').value='';$('#seedOv').hidden=false;};
 $('#btnSeedClose').onclick=()=>{$('#seedOv').hidden=true;};
 $('#seedIn').addEventListener('input',e=>{const v=normSeed(e.target.value);if(v!==e.target.value)e.target.value=v;});
 $('#seedIn').addEventListener('keydown',e=>{if(e.key==='Enter')$('#btnSeedGo').click();});
@@ -957,14 +1085,30 @@ $('#btnCopySeed').onclick=()=>{
   try{navigator.clipboard.writeText(text).then(ok,fallback);}catch(e){fallback();}};
 addEventListener('hashchange',()=>{const v=normSeed(location.hash.slice(1));if(v&&v!==S.seed)startSeed(v,`换成种子 ${v}，第 1 局开始`);});
 $('#btnSkipDeal').onclick=()=>finishDeal();
+const showLobby=on=>{$('#netLobby').hidden=!on;$('#netEntry').hidden=on;lobbyRender();};
+$('#btnNet').onclick=()=>{try{$('#netName').value=localStorage.getItem('gd-name')||$('#netName').value;}catch(e){}showLobby(!!NET.role);$('#netOv').hidden=false;};
+$('#netClose').onclick=()=>{$('#netOv').hidden=true;};
+$('#netName').addEventListener('change',()=>{try{localStorage.setItem('gd-name',$('#netName').value.trim());}catch(e){}});
+$('#netHostBtn').onclick=async()=>{try{await netHost();showLobby(true);}catch(e){toast(e.message,3500);}};
+$('#netJoinBtn').onclick=async()=>{try{await netJoin($('#netCodeIn').value);showLobby(true);}catch(e){toast(e.message,3500);}};
+$('#netCodeIn').addEventListener('input',e=>{e.target.value=normSeed(e.target.value).slice(0,5);});
+$('#netStart').onclick=()=>netStartGame();
+$('#netLeave').onclick=()=>{netCleanup();showLobby(false);render();};
+$('#netCopy').onclick=()=>{const t=`${location.origin}${location.pathname}?room=${NET.code}`;
+  try{navigator.clipboard.writeText(t).then(()=>toast('已复制邀请链接'),()=>toast('房间号 '+NET.code));}catch(e){toast('房间号 '+NET.code);}};
 $('#btnRules').onclick=()=>{$('#rulesOv').hidden=false;};
 $('#btnRulesClose').onclick=()=>{$('#rulesOv').hidden=true;};
 let newArm=null;
-$('#btnNew').onclick=e=>{const b=e.currentTarget;
+$('#btnNew').onclick=e=>{const b=e.currentTarget;if(NET.role==='guest')return toast('联机时由房主控制牌局');
   if(newArm){clearTimeout(newArm);newArm=null;b.textContent='重开';startSeed(null,'新开一盘，换了新种子，从 2 打起');return;}
   b.textContent='再点一次确认';newArm=setTimeout(()=>{newArm=null;b.textContent='重开';},3000);};
 addEventListener('resize',()=>S&&renderHand());
 
+function joinFromUrl(){
+  const m=/[?&]room=([A-Za-z0-9]{5})/.exec(location.search);if(!m)return;
+  $('#netCodeIn').value=m[1].toUpperCase();showLobby(false);$('#netOv').hidden=false;
+  toast('输入昵称后点“加入”',3000);
+}
 function start(data){
   setAILevel(pref.lv);
   const fromHash=normSeed(location.hash.slice(1));
@@ -972,10 +1116,11 @@ function start(data){
   if(!S.played)S.played=[];if(!S.groups)S.groups=[];
   if(!S.seed){S.seed=randomSeed();S.handNo=1;syncHash();}
   window.claude?.hot?.snapshot?.(()=>({S}));
-  if(!S.dealOrder0)S.dealOrder0=S.hands[0].slice();
+  if(!S.dealOrder0)S.dealOrder0=S.hands[ME].slice();
   const fresh=!data||!data.S;
   const go=()=>{render();schedule();if(fresh)toast(fromHash?`种子 ${S.seed}，第 1 局开始`:'你先出牌。你和对家一队，点“规则”看玩法',3200);};
   if(fresh)startDealAnim(go);else go();
+  joinFromUrl();
 }
 window.claude?.hot?.ready?window.claude.hot.ready(start):start(window.claude?.hot?.data??{});
 </script>
