@@ -565,6 +565,9 @@ function rankMoves(p,blind){
       const lowLead=(last.combo.type==='single'||last.combo.type==='pair')&&last.combo.v<=10;
       s-=(val+(lowLead?LEAD.low:0))*(1-0.5*beatProb(c.combo,p));
     }
+    if(c.wilds&&!c.combo.bomb){       // 逢人配 is the bomb/straight-flush maker: spend it on ordinary plays only late
+      const m=oppMin,f=m>=13?2.6:m>=9?1.9:m>=6?1.1:m>=3?.4:.1;
+      s+=c.wilds*1.6*f;}
     if(c.combo.bomb){
       const tr=S.tricks||[],oppTeam=(p+1)%2;let streak=0;
       for(let i=tr.length-1;i>=0&&tr[i]===oppTeam;i--)streak++;   // tricks the opponents have won in a row
