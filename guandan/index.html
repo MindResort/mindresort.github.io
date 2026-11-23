@@ -544,6 +544,9 @@ function bombCost(c,ctx){
   if(ctx.after<=1.5)f*=BP.run;
   return cost*f;
 }
+/* Winning the trick is worth something by itself: the winner leads next and can dump its weakest combo.
+   LEAD is that value; it grows while the opponents keep winning tricks (they are running the table). */
+const LEAD={base:.5,streak:.3,max:1.8};
 function rankMoves(p,blind){
   EVC=new Map();
   const hand=S.hands[p],last=S.last,base=evalCards(hand),u=unseenFor(p);
@@ -556,6 +559,11 @@ function rankMoves(p,blind){
     const n=c.cards.length,after=evalCards(without(hand,c.cards)),t=c.combo.type,v=c.combo.v;
     let s=after-base+(c.combo.bomb?0:v/40)-(last?0:n*0.04);
     if(n===hand.length)return {c,s:s-100,after:0};
+    if(last&&last.p%2!==p%2&&!blind){
+      const tr=S.tricks||[];let st=0;for(let i=tr.length-1;i>=0&&tr[i]===(p+1)%2;i--)st++;
+      const val=Math.min(LEAD.max,LEAD.base+LEAD.streak*st);
+      s-=val*(1-beatProb(c.combo,p));
+    }
     if(c.combo.bomb){
       const tr=S.tricks||[],oppTeam=(p+1)%2;let streak=0;
       for(let i=tr.length-1;i>=0&&tr[i]===oppTeam;i--)streak++;   // tricks the opponents have won in a row
