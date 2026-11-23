@@ -141,6 +141,9 @@ body{background:radial-gradient(ellipse 80% 60% at 50% 38%,var(--felt-2),var(--f
 .order{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:15px}
 .order .k{color:var(--muted)}
 .order .mine{color:var(--gold)}
+.order .left{grid-column:2;display:flex;flex-wrap:wrap;padding-left:9px;row-gap:4px;margin:-2px 0 4px;--cw:30px;--ch:42px}
+.order .left .card{margin-left:-9px}
+.order .left .card .idx b{font-size:calc(var(--cw)*.5)}
 .sheet p{margin:0;font-size:14px;line-height:1.7;color:var(--ink)}
 .rules{font-size:14px;line-height:1.75;margin:0;padding-left:1.2em}
 .rules b{color:var(--gold);font-weight:500}
@@ -823,8 +826,9 @@ function endHand(order){
   const win=order[0]%2,pp=order.indexOf((order[0]+2)%4),up=[0,3,2,1][pp];
   const before=S.level[win];let gameWon=false;
   if(S.levelTeam===win&&before===14&&up>=2)gameWon=true;else S.level[win]=Math.min(14,before+up);
-  S.levelTeam=win;S.prevOrder=order;S.phase=gameWon?'over':'end';S.result={order,win,up,gameWon};
-  render();
+  const left=S.hands.map(h=>h.slice().sort((a,b)=>cv(b)-cv(a)));   // cards nobody got to play, shown to everyone
+  S.levelTeam=win;S.prevOrder=order;S.phase=gameWon?'over':'end';S.result={order,win,up,gameWon,left};
+  render();netBroadcast();
 }
 function schedule(){clearTimeout(timer);if(DEAL||S.phase!=='play'||NET.role==='guest')return;if(!NET.human[S.cur])timer=setTimeout(aiMove,900);}
 
@@ -1011,7 +1015,8 @@ function render(){
   const ov=$('#endOv');ov.hidden=!S.result;
   if(S.result){const r=S.result,mine=r.win===ME%2;
     const title=r.gameWon?(mine?'过A！我们赢了':'对方过A，这盘输了'):(mine?`我方升${r.up}级`:`对方升${r.up}级`);
-    $('#endSheet').innerHTML=`<h2>${title}</h2><div class="order">${r.order.map((q,i)=>`<span class="k">${PLACE[i]}</span><span class="${q%2===ME%2?'mine':''}">${NAMES[q]}${q===(ME+2)%4?'（队友）':''}</span>`).join('')}</div>
+    const leftOf=q=>{const l=r.left&&r.left[q];return l&&l.length?`<div class="left" aria-label="剩下的牌">${l.map(c=>cardHTML(c,true)).join('')}</div>`:'';};
+    $('#endSheet').innerHTML=`<h2>${title}</h2><div class="order">${r.order.map((q,i)=>`<span class="k">${PLACE[i]}</span><span class="${q%2===ME%2?'mine':''}">${NAMES[q]}${q===(ME+2)%4?'（队友）':''}${r.left&&r.left[q]&&r.left[q].length?` <small style="color:var(--muted)">剩 ${r.left[q].length} 张</small>`:''}</span>${leftOf(q)}`).join('')}</div>
       <p>种子 ${S.seed} · 第${S.handNo}局。${r.gameWon?'整盘结束。':`我方打 ${rankName(S.level[ME%2])}，对方打 ${rankName(S.level[1-ME%2])}。下一局打 <b style="color:var(--gold)">${rankName(L())}</b>，${mine?'我方':'对方'}坐庄。`}</p>
       <button class="btn pri" id="btnNext">${r.gameWon?'再来一盘':'下一局'}</button>`;
     $('#btnNext').hidden=NET.role==='guest';
